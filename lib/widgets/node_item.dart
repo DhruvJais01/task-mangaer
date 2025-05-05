@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
+import 'dart:async'; // Add timer import
 import '../models/node.dart';
 import '../providers/node_provider.dart';
 import '../widgets/node_editor.dart';
@@ -37,8 +38,22 @@ class _NodeItemState extends State<NodeItem> {
   bool _showTopDropZone = false;
   bool _showBottomDropZone = false;
 
+  // New state variables for tracking locked drop zones
+  bool _topDropZoneLocked = false;
+  bool _bottomDropZoneLocked = false;
+
+  // Timer variables for delayed activation
+  Timer? _topDropZoneTimer;
+  Timer? _bottomDropZoneTimer;
+
   // Edge threshold in logical pixels - increase for better touch targets
   final double edgeThreshold = 20.0;
+
+  // Threshold for significant movement
+  final double movementThreshold = 40.0;
+
+  // Last position for tracking movement
+  Offset? _lastDragPosition;
 
   @override
   void initState() {
@@ -52,6 +67,14 @@ class _NodeItemState extends State<NodeItem> {
     if (oldWidget.node.isExpanded != widget.node.isExpanded) {
       _isExpanded = widget.node.isExpanded;
     }
+  }
+
+  @override
+  void dispose() {
+    // Cancel any active timers
+    _topDropZoneTimer?.cancel();
+    _bottomDropZoneTimer?.cancel();
+    super.dispose();
   }
 
   void _toggleExpanded() {
@@ -71,16 +94,97 @@ class _NodeItemState extends State<NodeItem> {
   // New method to update top/bottom drop zone visibility
   void _updateEdgeDropZones(bool isEntering,
       {bool isTop = false, bool isBottom = false}) {
-    if (mounted) {
+    if (!mounted) return;
+
+    // For deactivation, only proceed if the zones aren't locked or we're forcing deactivation
+    if (!isEntering) {
       setState(() {
         if (isTop) {
-          _showTopDropZone = isEntering;
+          // Cancel any pending timer
+          _topDropZoneTimer?.cancel();
+          _topDropZoneTimer = null;
+
+          if (!_topDropZoneLocked) {
+            _showTopDropZone = false;
+          }
         }
         if (isBottom) {
-          _showBottomDropZone = isEntering;
+          // Cancel any pending timer
+          _bottomDropZoneTimer?.cancel();
+          _bottomDropZoneTimer = null;
+
+          if (!_bottomDropZoneLocked) {
+            _showBottomDropZone = false;
+          }
+        }
+      });
+      return;
+    }
+
+    // For activation, use a delay to prevent flickering
+    if (isTop) {
+      // Cancel existing timer
+      _topDropZoneTimer?.cancel();
+
+      // If already locked or shown, just ensure it stays visible
+      if (_topDropZoneLocked || _showTopDropZone) {
+        setState(() {
+          _showTopDropZone = true;
+        });
+        return;
+      }
+
+      // Start a new timer for delayed activation
+      _topDropZoneTimer = Timer(const Duration(milliseconds: 250), () {
+        if (mounted) {
+          setState(() {
+            _showTopDropZone = true;
+            _topDropZoneLocked = true; // Lock it once activated
+          });
         }
       });
     }
+
+    if (isBottom) {
+      // Cancel existing timer
+      _bottomDropZoneTimer?.cancel();
+
+      // If already locked or shown, just ensure it stays visible
+      if (_bottomDropZoneLocked || _showBottomDropZone) {
+        setState(() {
+          _showBottomDropZone = true;
+        });
+        return;
+      }
+
+      // Start a new timer for delayed activation
+      _bottomDropZoneTimer = Timer(const Duration(milliseconds: 250), () {
+        if (mounted) {
+          setState(() {
+            _showBottomDropZone = true;
+            _bottomDropZoneLocked = true; // Lock it once activated
+          });
+        }
+      });
+    }
+  }
+
+  // Method to reset all drop zone locks
+  void _resetDropZoneLocks() {
+    if (mounted) {
+      setState(() {
+        _topDropZoneLocked = false;
+        _bottomDropZoneLocked = false;
+        _showTopDropZone = false;
+        _showBottomDropZone = false;
+      });
+    }
+
+    // Cancel any pending timers
+    _topDropZoneTimer?.cancel();
+    _topDropZoneTimer = null;
+    _bottomDropZoneTimer?.cancel();
+    _bottomDropZoneTimer = null;
   }
 
   // Helper to show snackbar feedback
@@ -144,7 +248,7 @@ class _NodeItemState extends State<NodeItem> {
                       padding: const EdgeInsets.symmetric(
                           vertical: 6, horizontal: 12),
                       decoration: BoxDecoration(
-                        color: isActive
+                        color: isActive || _topDropZoneLocked
                             ? Theme.of(context)
                                 .colorScheme
                                 .primary
@@ -155,10 +259,10 @@ class _NodeItemState extends State<NodeItem> {
                                 .withOpacity(0.15),
                         border: Border.all(
                           color: Theme.of(context).colorScheme.primary,
-                          width: 2,
+                          width: isActive || _topDropZoneLocked ? 3 : 2,
                         ),
                         borderRadius: BorderRadius.circular(8),
-                        boxShadow: isActive
+                        boxShadow: isActive || _topDropZoneLocked
                             ? [
                                 BoxShadow(
                                   color: Theme.of(context)
@@ -201,9 +305,7 @@ class _NodeItemState extends State<NodeItem> {
                   },
                   onAccept: (dragged) {
                     nodeProvider.insertNodeBefore(dragged, widget.node);
-                    _updateEdgeDropZones(false, isTop: true);
-
-                    // Show success message
+                    _resetDropZoneLocks();
                     _showReorderFeedback(dragged, "above");
                   },
                   onLeave: (_) {
@@ -295,16 +397,16 @@ class _NodeItemState extends State<NodeItem> {
               onDragEnd: (_) {
                 setState(() {
                   _isDragging = false;
-                  // Clean up drop zones
-                  _updateEdgeDropZones(false, isTop: true, isBottom: true);
                 });
+                // Reset all drop zone states
+                _resetDropZoneLocks();
               },
               onDraggableCanceled: (_, __) {
                 setState(() {
                   _isDragging = false;
-                  // Clean up drop zones
-                  _updateEdgeDropZones(false, isTop: true, isBottom: true);
                 });
+                // Reset all drop zone states
+                _resetDropZoneLocks();
               },
 
               // The widget that can be dragged
@@ -347,22 +449,51 @@ class _NodeItemState extends State<NodeItem> {
             final size = renderBox.size;
             final localPosition = renderBox.globalToLocal(details.offset);
 
-            // Update the drop zone in state
-            _updateDropZone(localPosition, size);
+            // Track significant movement
+            bool hasSignificantMovement = false;
+            if (_lastDragPosition != null) {
+              final distance = (_lastDragPosition! - localPosition).distance;
+              hasSignificantMovement = distance > movementThreshold;
+
+              // If significant movement, unlock zones
+              if (hasSignificantMovement) {
+                _topDropZoneLocked = false;
+                _bottomDropZoneLocked = false;
+              }
+            }
+            _lastDragPosition = localPosition;
 
             // Show the animated drop zones based on position
             // Use the edgeThreshold variable for consistent detection
             final isTopEdge = localPosition.dy < edgeThreshold;
             final isBottomEdge = localPosition.dy > size.height - edgeThreshold;
 
+            // If we're in a locked drop zone but moved significantly away from the edge,
+            // unlock it to allow deactivation
+            if (_topDropZoneLocked && !isTopEdge && hasSignificantMovement) {
+              _topDropZoneLocked = false;
+              _updateEdgeDropZones(false, isTop: true);
+            }
+
+            if (_bottomDropZoneLocked &&
+                !isBottomEdge &&
+                hasSignificantMovement) {
+              _bottomDropZoneLocked = false;
+              _updateEdgeDropZones(false, isBottom: true);
+            }
+
+            // Activate/deactivate drop zones
             if (isTopEdge) {
               _updateEdgeDropZones(true, isTop: true, isBottom: false);
             } else if (isBottomEdge) {
               _updateEdgeDropZones(true, isTop: false, isBottom: true);
-            } else {
-              // Hide the between-node drop targets when not at the edges
+            } else if (!_topDropZoneLocked && !_bottomDropZoneLocked) {
+              // Only hide if not locked and not at edges
               _updateEdgeDropZones(false, isTop: true, isBottom: true);
             }
+
+            // Update the drop zone in state
+            _updateDropZone(localPosition, size);
 
             // For "before" or "after", check if they're siblings or can be siblings
             if (_currentDropZone == "before" || _currentDropZone == "after") {
@@ -410,18 +541,16 @@ class _NodeItemState extends State<NodeItem> {
               nodeProvider.insertNodeBefore(dragged, widget.node);
               setState(() {
                 _isTargeted = false;
-                // Clean up all drop zones
-                _updateEdgeDropZones(false, isTop: true, isBottom: true);
               });
+              _resetDropZoneLocks();
               _showReorderFeedback(dragged, "above");
               return;
             } else if (_currentDropZone == "after") {
               nodeProvider.insertNodeAfter(dragged, widget.node);
               setState(() {
                 _isTargeted = false;
-                // Clean up all drop zones
-                _updateEdgeDropZones(false, isTop: true, isBottom: true);
               });
+              _resetDropZoneLocks();
               _showReorderFeedback(dragged, "below");
               return;
             }
@@ -438,9 +567,8 @@ class _NodeItemState extends State<NodeItem> {
               // Reset target state
               setState(() {
                 _isTargeted = false;
-                // Clean up all drop zones
-                _updateEdgeDropZones(false, isTop: true, isBottom: true);
               });
+              _resetDropZoneLocks();
             });
           },
           onLeave: (_) {
@@ -448,9 +576,9 @@ class _NodeItemState extends State<NodeItem> {
             Future.microtask(() {
               setState(() {
                 _isTargeted = false;
-                // Clean up drop zones
-                _updateEdgeDropZones(false, isTop: true, isBottom: true);
               });
+              // Reset all drop zone states when leaving the node completely
+              _resetDropZoneLocks();
             });
           },
         ),
@@ -487,7 +615,7 @@ class _NodeItemState extends State<NodeItem> {
                       padding: const EdgeInsets.symmetric(
                           vertical: 6, horizontal: 12),
                       decoration: BoxDecoration(
-                        color: isActive
+                        color: isActive || _bottomDropZoneLocked
                             ? Theme.of(context)
                                 .colorScheme
                                 .primary
@@ -498,10 +626,10 @@ class _NodeItemState extends State<NodeItem> {
                                 .withOpacity(0.15),
                         border: Border.all(
                           color: Theme.of(context).colorScheme.primary,
-                          width: 2,
+                          width: isActive || _bottomDropZoneLocked ? 3 : 2,
                         ),
                         borderRadius: BorderRadius.circular(8),
-                        boxShadow: isActive
+                        boxShadow: isActive || _bottomDropZoneLocked
                             ? [
                                 BoxShadow(
                                   color: Theme.of(context)
@@ -544,9 +672,7 @@ class _NodeItemState extends State<NodeItem> {
                   },
                   onAccept: (dragged) {
                     nodeProvider.insertNodeAfter(dragged, widget.node);
-                    _updateEdgeDropZones(false, isBottom: true);
-
-                    // Show success message
+                    _resetDropZoneLocks();
                     _showReorderFeedback(dragged, "below");
                   },
                   onLeave: (_) {

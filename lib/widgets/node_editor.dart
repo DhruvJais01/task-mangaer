@@ -78,7 +78,7 @@ class _NodeEditorState extends State<NodeEditor> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text(widget.node == null ? 'Add Node' : 'Edit Node'),
+      title: Text(widget.node == null ? 'Add Task' : 'Edit Task'),
       content: Form(
         key: _formKey,
         child: SingleChildScrollView(

@@ -30,7 +30,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ? TextField(
                 controller: _searchController,
                 decoration: InputDecoration(
-                  hintText: 'Search nodes...',
+                  hintText: 'Search tasks...',
                   border: InputBorder.none,
                   hintStyle: TextStyle(color: Theme.of(context).hintColor),
                 ),
@@ -130,7 +130,7 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             const SizedBox(height: 16),
             Text(
-              isSearching ? 'No matching nodes found' : 'No nodes yet',
+              isSearching ? 'No matching tasks found' : 'No tasks yet',
               style: Theme.of(context).textTheme.headlineSmall,
               textAlign: TextAlign.center,
             ),
@@ -138,7 +138,7 @@ class _HomeScreenState extends State<HomeScreen> {
             Text(
               isSearching
                   ? 'Try a different search term'
-                  : 'Tap the + button to add your first node',
+                  : 'Tap the + button to add your first task',
               style: Theme.of(context).textTheme.bodyLarge,
               textAlign: TextAlign.center,
             ),
