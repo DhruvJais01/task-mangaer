@@ -209,14 +209,39 @@ class NodeProvider extends ChangeNotifier {
     saveNodes();
   }
 
-  // Check if moving would create a cycle
+  // Check if moving would create a cycle (node cannot be its own ancestor)
   bool _wouldCreateCycle(Node node, Node possibleDescendant) {
+    // A node cannot be its own ancestor
     if (node.id == possibleDescendant.id) return true;
 
+    // Check if possibleDescendant is already an ancestor of node
+    // by walking up the tree from possibleDescendant
     Node? current = findParentNode(possibleDescendant.id);
+
+    // Walk up the tree to find all ancestors
     while (current != null) {
+      // If we find the node, it would create a cycle
       if (current.id == node.id) return true;
+
+      // Get the parent of the current node and continue checking
       current = findParentNode(current.id);
+    }
+
+    // No cycle would be created
+    return false;
+  }
+
+  // More efficient recursive method to check if a node is a descendant of another
+  bool isDescendantOf(Node ancestor, Node possibleDescendant) {
+    // Direct check
+    if (ancestor.id == possibleDescendant.id) return true;
+
+    // Check if any child of ancestor matches possibleDescendant
+    for (final child in ancestor.children) {
+      if (child.id == possibleDescendant.id) return true;
+
+      // Recursive check on each child
+      if (isDescendantOf(child, possibleDescendant)) return true;
     }
 
     return false;
@@ -500,5 +525,195 @@ class NodeProvider extends ChangeNotifier {
     }
     rootNodes.add(node);
     notifyListeners();
+  }
+
+  // Reorder siblings by swapping positions
+  void reorderSiblings(Node node1, Node node2) {
+    // If both nodes are root nodes
+    bool bothRootNodes = rootNodes.contains(node1) && rootNodes.contains(node2);
+    if (bothRootNodes) {
+      final index1 = rootNodes.indexOf(node1);
+      final index2 = rootNodes.indexOf(node2);
+      if (index1 != -1 && index2 != -1) {
+        // Swap positions
+        rootNodes[index1] = node2;
+        rootNodes[index2] = node1;
+        saveNodes();
+        notifyListeners();
+      }
+      return;
+    }
+
+    // If both have the same parent
+    final parent1 = findParentNode(node1.id);
+    final parent2 = findParentNode(node2.id);
+
+    if (parent1 != null && parent1.id == parent2?.id) {
+      final index1 = parent1.children.indexOf(node1);
+      final index2 = parent1.children.indexOf(node2);
+      if (index1 != -1 && index2 != -1) {
+        // Swap positions
+        parent1.children[index1] = node2;
+        parent1.children[index2] = node1;
+        saveNodes();
+        notifyListeners();
+      }
+    }
+  }
+
+  // Check if two nodes are siblings
+  bool areSiblings(Node node1, Node node2) {
+    // Both are root nodes
+    if (rootNodes.contains(node1) && rootNodes.contains(node2)) {
+      return true;
+    }
+
+    // Check if they have the same parent
+    final parent1 = findParentNode(node1.id);
+    final parent2 = findParentNode(node2.id);
+
+    return parent1 != null && parent1.id == parent2?.id;
+  }
+
+  // Insert node before a target sibling node
+  bool insertNodeBefore(Node nodeToInsert, Node targetSibling) {
+    // If both are root nodes
+    if (rootNodes.contains(nodeToInsert) && rootNodes.contains(targetSibling)) {
+      // Remove the node from its current position
+      rootNodes.remove(nodeToInsert);
+
+      // Insert before the target
+      final targetIndex = rootNodes.indexOf(targetSibling);
+      rootNodes.insert(targetIndex, nodeToInsert);
+      saveNodes();
+      notifyListeners();
+      return true;
+    }
+
+    // If they're children nodes
+    final parent = findParentNode(targetSibling.id);
+    if (parent != null) {
+      // If the node to insert is not already a child of this parent, handle that first
+      if (nodeToInsert.parentId != parent.id) {
+        // Remove from old parent
+        if (rootNodes.contains(nodeToInsert)) {
+          rootNodes.remove(nodeToInsert);
+        } else {
+          final oldParent = findParentNode(nodeToInsert.id);
+          if (oldParent != null) {
+            oldParent.children
+                .removeWhere((child) => child.id == nodeToInsert.id);
+          }
+        }
+
+        // Update node properties
+        nodeToInsert.parentId = parent.id;
+        nodeToInsert.depth = parent.depth + 1;
+        _updateDepthRecursively(nodeToInsert, parent.depth + 1);
+      } else {
+        // If they're siblings, just remove from current position
+        parent.children.remove(nodeToInsert);
+      }
+
+      // Insert before the target
+      final targetIndex = parent.children.indexOf(targetSibling);
+      parent.children.insert(targetIndex, nodeToInsert);
+      saveNodes();
+      notifyListeners();
+      return true;
+    }
+
+    return false;
+  }
+
+  // Insert node after a target sibling node
+  bool insertNodeAfter(Node nodeToInsert, Node targetSibling) {
+    // If both are root nodes
+    if (rootNodes.contains(nodeToInsert) && rootNodes.contains(targetSibling)) {
+      // Remove the node from its current position
+      rootNodes.remove(nodeToInsert);
+
+      // Insert after the target
+      final targetIndex = rootNodes.indexOf(targetSibling);
+      rootNodes.insert(targetIndex + 1, nodeToInsert);
+      saveNodes();
+      notifyListeners();
+      return true;
+    }
+
+    // If they're children nodes
+    final parent = findParentNode(targetSibling.id);
+    if (parent != null) {
+      // If the node to insert is not already a child of this parent, handle that first
+      if (nodeToInsert.parentId != parent.id) {
+        // Remove from old parent
+        if (rootNodes.contains(nodeToInsert)) {
+          rootNodes.remove(nodeToInsert);
+        } else {
+          final oldParent = findParentNode(nodeToInsert.id);
+          if (oldParent != null) {
+            oldParent.children
+                .removeWhere((child) => child.id == nodeToInsert.id);
+          }
+        }
+
+        // Update node properties
+        nodeToInsert.parentId = parent.id;
+        nodeToInsert.depth = parent.depth + 1;
+        _updateDepthRecursively(nodeToInsert, parent.depth + 1);
+      } else {
+        // If they're siblings, just remove from current position
+        parent.children.remove(nodeToInsert);
+      }
+
+      // Insert after the target
+      final targetIndex = parent.children.indexOf(targetSibling);
+      parent.children.insert(targetIndex + 1, nodeToInsert);
+      saveNodes();
+      notifyListeners();
+      return true;
+    }
+
+    return false;
+  }
+
+  // Move a node to be the last child of a target node, and ensure target is expanded
+  bool moveNodeToLastChild(Node nodeToMove, Node targetParent) {
+    // Prevent cyclic references
+    if (nodeToMove.id == targetParent.id ||
+        _wouldCreateCycle(nodeToMove, targetParent)) {
+      return false;
+    }
+
+    // Check depth limit
+    final maxChildDepth = getMaxDepth(nodeToMove);
+    if (targetParent.depth + 1 + maxChildDepth > 5) {
+      return false;
+    }
+
+    // Remove from current position
+    if (rootNodes.contains(nodeToMove)) {
+      rootNodes.remove(nodeToMove);
+    } else {
+      final oldParent = findParentNode(nodeToMove.id);
+      if (oldParent != null) {
+        oldParent.children.removeWhere((child) => child.id == nodeToMove.id);
+      }
+    }
+
+    // Update properties
+    nodeToMove.parentId = targetParent.id;
+    nodeToMove.depth = targetParent.depth + 1;
+    _updateDepthRecursively(nodeToMove, targetParent.depth + 1);
+
+    // Add as last child
+    targetParent.children.add(nodeToMove);
+
+    // Ensure target is expanded
+    targetParent.isExpanded = true;
+
+    saveNodes();
+    notifyListeners();
+    return true;
   }
 }

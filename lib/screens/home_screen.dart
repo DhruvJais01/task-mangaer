@@ -5,25 +5,72 @@ import '../providers/node_provider.dart';
 import '../widgets/node_tree.dart';
 import '../widgets/node_editor.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({Key? key}) : super(key: key);
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  bool _showSearchBar = false;
+  final TextEditingController _searchController = TextEditingController();
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Inovizia Task Manager'),
-        centerTitle: true,
+        title: _showSearchBar
+            ? TextField(
+                controller: _searchController,
+                decoration: InputDecoration(
+                  hintText: 'Search nodes...',
+                  border: InputBorder.none,
+                  hintStyle: TextStyle(color: Theme.of(context).hintColor),
+                ),
+                style:
+                    TextStyle(color: Theme.of(context).colorScheme.onPrimary),
+                autofocus: true,
+                onChanged: (value) {
+                  Provider.of<NodeProvider>(context, listen: false)
+                      .searchNodes(value);
+                },
+              )
+            : const Text('Inovizia Task Manager'),
+        centerTitle: !_showSearchBar,
+        actions: [
+          IconButton(
+            icon: Icon(_showSearchBar ? Icons.close : Icons.search),
+            onPressed: () {
+              setState(() {
+                if (_showSearchBar) {
+                  _searchController.clear();
+                  Provider.of<NodeProvider>(context, listen: false)
+                      .clearSearch();
+                }
+                _showSearchBar = !_showSearchBar;
+              });
+            },
+          ),
+        ],
       ),
       body: Consumer<NodeProvider>(
         builder: (context, nodeProvider, _) {
-          final nodes = nodeProvider.rootNodes;
+          final isSearching = nodeProvider.isSearchActive;
+          final nodes =
+              isSearching ? nodeProvider.searchResults : nodeProvider.rootNodes;
 
           return Column(
             children: [
               Expanded(
                 child: nodes.isEmpty
-                    ? _buildEmptyState(context, false)
+                    ? _buildEmptyState(context, isSearching)
                     : SingleChildScrollView(
                         child: Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 16.0),

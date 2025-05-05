@@ -1,6 +1,5 @@
 import 'package:hive/hive.dart';
 import 'package:uuid/uuid.dart';
-import 'package:flutter/foundation.dart';
 
 part 'node.g.dart';
 

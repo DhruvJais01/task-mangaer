@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'dart:ui' as ui;
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../models/node.dart';
@@ -31,6 +30,16 @@ class _NodeItemState extends State<NodeItem> {
   bool _isTargeted = false;
   bool _showDetails = false; // New state for toggling details visibility
 
+  // Track the current drop zone in state
+  String _currentDropZone = "inside";
+
+  // New state for tracking top/bottom drop edge animations
+  bool _showTopDropZone = false;
+  bool _showBottomDropZone = false;
+
+  // Edge threshold in logical pixels - increase for better touch targets
+  final double edgeThreshold = 20.0;
+
   @override
   void initState() {
     super.initState();
@@ -59,16 +68,151 @@ class _NodeItemState extends State<NodeItem> {
     });
   }
 
+  // New method to update top/bottom drop zone visibility
+  void _updateEdgeDropZones(bool isEntering,
+      {bool isTop = false, bool isBottom = false}) {
+    if (mounted) {
+      setState(() {
+        if (isTop) {
+          _showTopDropZone = isEntering;
+        }
+        if (isBottom) {
+          _showBottomDropZone = isEntering;
+        }
+      });
+    }
+  }
+
+  // Helper to show snackbar feedback
+  void _showReorderFeedback(Node draggedNode, String position) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+            'Moved "${draggedNode.title}" $position "${widget.node.title}"'),
+        duration: const Duration(seconds: 2),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  // Update the drop zone based on drag position
+  void _updateDropZone(Offset position, Size nodeSize) {
+    final oldDropZone = _currentDropZone;
+
+    // Using more balanced thresholds for better usability
+    // Top 35% = before, bottom 35% = after, middle 30% = inside
+    final topThresholdPercentage = 0.35;
+    final bottomThresholdPercentage = 0.65;
+
+    if (position.dy < nodeSize.height * topThresholdPercentage) {
+      _currentDropZone = "before";
+    } else if (position.dy > nodeSize.height * bottomThresholdPercentage) {
+      _currentDropZone = "after";
+    } else {
+      _currentDropZone = "inside";
+    }
+
+    // If zone changed, trigger a rebuild for visual feedback
+    if (oldDropZone != _currentDropZone) {
+      setState(() {});
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final nodeProvider = Provider.of<NodeProvider>(context, listen: false);
     final depth = widget.node.depth;
     final hasChildren = widget.node.children.isNotEmpty;
     final indent = depth * 1.0;
+    final isSearchActive = nodeProvider.isSearchActive;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // Animated top drop zone that appears between nodes
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          curve: Curves.easeOutCubic,
+          height: _showTopDropZone ? 48.0 : 0.0,
+          margin: EdgeInsets.only(left: indent + 16, right: 16),
+          child: _showTopDropZone
+              ? DragTarget<Node>(
+                  builder: (context, candidateData, rejectedData) {
+                    final isActive = candidateData.isNotEmpty;
+                    return Container(
+                      alignment: Alignment.center,
+                      padding: const EdgeInsets.symmetric(
+                          vertical: 6, horizontal: 12),
+                      decoration: BoxDecoration(
+                        color: isActive
+                            ? Theme.of(context)
+                                .colorScheme
+                                .primary
+                                .withOpacity(0.2)
+                            : Theme.of(context)
+                                .colorScheme
+                                .primary
+                                .withOpacity(0.15),
+                        border: Border.all(
+                          color: Theme.of(context).colorScheme.primary,
+                          width: 2,
+                        ),
+                        borderRadius: BorderRadius.circular(8),
+                        boxShadow: isActive
+                            ? [
+                                BoxShadow(
+                                  color: Theme.of(context)
+                                      .shadowColor
+                                      .withOpacity(0.3),
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 2),
+                                )
+                              ]
+                            : null,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.arrow_upward,
+                            color: Theme.of(context).colorScheme.primary,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            "Place above",
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.primary,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                  onWillAccept: (dragged) {
+                    if (dragged == null) return false;
+                    if (dragged.id == widget.node.id) return false;
+                    // Prevent cyclic references
+                    if (nodeProvider.isDescendantOf(dragged, widget.node))
+                      return false;
+                    return true;
+                  },
+                  onAccept: (dragged) {
+                    nodeProvider.insertNodeBefore(dragged, widget.node);
+                    _updateEdgeDropZones(false, isTop: true);
+
+                    // Show success message
+                    _showReorderFeedback(dragged, "above");
+                  },
+                  onLeave: (_) {
+                    _updateEdgeDropZones(false, isTop: true);
+                  },
+                )
+              : null,
+        ),
+
         // Draggable Node with integrated DragTarget
         DragTarget<Node>(
           builder: (context, candidateData, rejectedData) {
@@ -101,7 +245,7 @@ class _NodeItemState extends State<NodeItem> {
                 borderRadius: BorderRadius.circular(8),
                 child: Container(
                   width: MediaQuery.of(context).size.width * 0.7,
-                  padding: const EdgeInsets.all(4),
+                  padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
                     color: Theme.of(context).cardColor,
                     borderRadius: BorderRadius.circular(8),
@@ -113,11 +257,30 @@ class _NodeItemState extends State<NodeItem> {
                       BoxShadow(
                         color: Colors.black.withOpacity(0.3),
                         blurRadius: 8,
-                        offset: Offset(0, 4),
+                        offset: const Offset(0, 4),
                       )
                     ],
                   ),
-                  child: _buildNodeTitleOnly(context, 0, dragging: true),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        Icons.drag_indicator,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(
+                          widget.node.title,
+                          style:
+                              Theme.of(context).textTheme.bodyLarge?.copyWith(
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
 
@@ -129,9 +292,20 @@ class _NodeItemState extends State<NodeItem> {
 
               // Track drag state
               onDragStarted: () => setState(() => _isDragging = true),
-              onDragEnd: (_) => setState(() => _isDragging = false),
-              onDraggableCanceled: (_, __) =>
-                  setState(() => _isDragging = false),
+              onDragEnd: (_) {
+                setState(() {
+                  _isDragging = false;
+                  // Clean up drop zones
+                  _updateEdgeDropZones(false, isTop: true, isBottom: true);
+                });
+              },
+              onDraggableCanceled: (_, __) {
+                setState(() {
+                  _isDragging = false;
+                  // Clean up drop zones
+                  _updateEdgeDropZones(false, isTop: true, isBottom: true);
+                });
+              },
 
               // The widget that can be dragged
               child: MouseRegion(
@@ -149,44 +323,64 @@ class _NodeItemState extends State<NodeItem> {
                       child: _buildNodeCard(context, indent),
                     ),
 
-                    // Drop target indicator overlay
-                    if (_isTargeted)
-                      Positioned.fill(
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: Theme.of(context)
-                                .colorScheme
-                                .secondary
-                                .withOpacity(0.15),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color: Theme.of(context).colorScheme.secondary,
-                              width: 1,
-                            ),
-                          ),
-                          child: Center(
-                            child: Icon(
-                              Icons.add_circle_outline,
-                              color: Theme.of(context).colorScheme.secondary,
-                              size: 24,
-                            ),
-                          ),
-                        ),
-                      ),
+                    // Drop target indicator overlay for different zones
+                    if (_isTargeted) _buildTargetOverlay(context, hasChildren),
                   ],
                 ),
               ),
             );
           },
-          onWillAccept: (dragged) {
+          // Use onWillAcceptWithDetails to get position information
+          onWillAcceptWithDetails: (DragTargetDetails<Node> details) {
+            final dragged = details.data;
             if (dragged == null) return false;
 
-            // Prevent moving into itself or its descendants
+            final nodeProvider =
+                Provider.of<NodeProvider>(context, listen: false);
+            final isSearchActive = nodeProvider.isSearchActive;
+
+            // Disable dragging if search is active
+            if (isSearchActive) return false;
+
+            // Calculate if we're in the top edge, bottom edge, or center
+            final RenderBox renderBox = context.findRenderObject() as RenderBox;
+            final size = renderBox.size;
+            final localPosition = renderBox.globalToLocal(details.offset);
+
+            // Update the drop zone in state
+            _updateDropZone(localPosition, size);
+
+            // Show the animated drop zones based on position
+            // Use the edgeThreshold variable for consistent detection
+            final isTopEdge = localPosition.dy < edgeThreshold;
+            final isBottomEdge = localPosition.dy > size.height - edgeThreshold;
+
+            if (isTopEdge) {
+              _updateEdgeDropZones(true, isTop: true, isBottom: false);
+            } else if (isBottomEdge) {
+              _updateEdgeDropZones(true, isTop: false, isBottom: true);
+            } else {
+              // Hide the between-node drop targets when not at the edges
+              _updateEdgeDropZones(false, isTop: true, isBottom: true);
+            }
+
+            // For "before" or "after", check if they're siblings or can be siblings
+            if (_currentDropZone == "before" || _currentDropZone == "after") {
+              // Don't accept drop on self
+              if (dragged.id == widget.node.id) return false;
+
+              // We can drop if they're siblings or can become siblings
+              final parent =
+                  widget.parent ?? nodeProvider.findParentNode(widget.node.id);
+              return parent != null ||
+                  (nodeProvider.rootNodes.contains(widget.node));
+            }
+
+            // For "inside", check if this would create a cycle
             if (dragged.id == widget.node.id) return false;
 
             // Prevent cyclic references
-            if (_wouldCreateCycle(nodeProvider, dragged, widget.node))
-              return false;
+            if (nodeProvider.isDescendantOf(dragged, widget.node)) return false;
 
             // Check depth limit
             final maxChildDepth = nodeProvider.getMaxDepth(dragged);
@@ -201,34 +395,51 @@ class _NodeItemState extends State<NodeItem> {
 
             return true;
           },
-          onAccept: (dragged) {
-            // Handle the drop as adding a child
+          // Use onAcceptWithDetails to handle the drop
+          onAcceptWithDetails: (DragTargetDetails<Node> details) {
+            final dragged = details.data;
+            final nodeProvider =
+                Provider.of<NodeProvider>(context, listen: false);
+
+            // Debug print to see which zone is being used on drop
+            print(
+                'Dropping in zone: ${_currentDropZone == "before" ? "Place above" : _currentDropZone == "after" ? "Place below" : "Add as child"}');
+
+            // Handle drop based on the current zone
+            if (_currentDropZone == "before") {
+              nodeProvider.insertNodeBefore(dragged, widget.node);
+              setState(() {
+                _isTargeted = false;
+                // Clean up all drop zones
+                _updateEdgeDropZones(false, isTop: true, isBottom: true);
+              });
+              _showReorderFeedback(dragged, "above");
+              return;
+            } else if (_currentDropZone == "after") {
+              nodeProvider.insertNodeAfter(dragged, widget.node);
+              setState(() {
+                _isTargeted = false;
+                // Clean up all drop zones
+                _updateEdgeDropZones(false, isTop: true, isBottom: true);
+              });
+              _showReorderFeedback(dragged, "below");
+              return;
+            }
+
+            // This is a parent-child operation - Auto-expand and add as last child
             Future.microtask(() {
-              final nodeProvider =
-                  Provider.of<NodeProvider>(context, listen: false);
-              bool success = nodeProvider.moveNodeToProvider(
-                dragged: dragged,
-                target: widget.node,
-                position: 'inside',
-              );
+              bool success =
+                  nodeProvider.moveNodeToLastChild(dragged, widget.node);
 
               if (success) {
-                // Expand the node to show the newly added child
-                if (!widget.node.isExpanded) {
-                  nodeProvider.toggleNodeExpansion(widget.node.id);
-                }
-
-                // Show success message
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                      content: Text(
-                          'Added "${dragged.title}" as child of "${widget.node.title}"')),
-                );
+                _showReorderFeedback(dragged, "as child of");
               }
 
               // Reset target state
               setState(() {
                 _isTargeted = false;
+                // Clean up all drop zones
+                _updateEdgeDropZones(false, isTop: true, isBottom: true);
               });
             });
           },
@@ -237,6 +448,8 @@ class _NodeItemState extends State<NodeItem> {
             Future.microtask(() {
               setState(() {
                 _isTargeted = false;
+                // Clean up drop zones
+                _updateEdgeDropZones(false, isTop: true, isBottom: true);
               });
             });
           },
@@ -258,7 +471,224 @@ class _NodeItemState extends State<NodeItem> {
               }).toList(),
             ),
           ),
+
+        // Animated bottom drop zone
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          curve: Curves.easeOutCubic,
+          height: _showBottomDropZone ? 48.0 : 0.0,
+          margin: EdgeInsets.only(left: indent + 16, right: 16),
+          child: _showBottomDropZone
+              ? DragTarget<Node>(
+                  builder: (context, candidateData, rejectedData) {
+                    final isActive = candidateData.isNotEmpty;
+                    return Container(
+                      alignment: Alignment.center,
+                      padding: const EdgeInsets.symmetric(
+                          vertical: 6, horizontal: 12),
+                      decoration: BoxDecoration(
+                        color: isActive
+                            ? Theme.of(context)
+                                .colorScheme
+                                .primary
+                                .withOpacity(0.2)
+                            : Theme.of(context)
+                                .colorScheme
+                                .primary
+                                .withOpacity(0.15),
+                        border: Border.all(
+                          color: Theme.of(context).colorScheme.primary,
+                          width: 2,
+                        ),
+                        borderRadius: BorderRadius.circular(8),
+                        boxShadow: isActive
+                            ? [
+                                BoxShadow(
+                                  color: Theme.of(context)
+                                      .shadowColor
+                                      .withOpacity(0.3),
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 2),
+                                )
+                              ]
+                            : null,
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.arrow_downward,
+                            color: Theme.of(context).colorScheme.primary,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            "Place below",
+                            style: TextStyle(
+                              color: Theme.of(context).colorScheme.primary,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                  onWillAccept: (dragged) {
+                    if (dragged == null) return false;
+                    if (dragged.id == widget.node.id) return false;
+                    // Prevent cyclic references
+                    if (nodeProvider.isDescendantOf(dragged, widget.node))
+                      return false;
+                    return true;
+                  },
+                  onAccept: (dragged) {
+                    nodeProvider.insertNodeAfter(dragged, widget.node);
+                    _updateEdgeDropZones(false, isBottom: true);
+
+                    // Show success message
+                    _showReorderFeedback(dragged, "below");
+                  },
+                  onLeave: (_) {
+                    _updateEdgeDropZones(false, isBottom: true);
+                  },
+                )
+              : null,
+        ),
       ],
+    );
+  }
+
+  // Build a customized target overlay based on the drop zone
+  Widget _buildTargetOverlay(BuildContext context, bool hasChildren) {
+    final theme = Theme.of(context);
+
+    // Different visual styles based on the drop zone
+    Color backgroundColor;
+    Color borderColor;
+    Widget content;
+
+    if (_currentDropZone == "before") {
+      // Enhanced "Place above" styling
+      backgroundColor = theme.colorScheme.primary.withOpacity(0.15);
+      borderColor = theme.colorScheme.primary;
+      content = Container(
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+        width: double.infinity,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.arrow_upward,
+                  color: theme.colorScheme.primary,
+                  size: 20,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  "Place above",
+                  style: TextStyle(
+                    color: theme.colorScheme.primary,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+              ],
+            ),
+            const Spacer(),
+          ],
+        ),
+      );
+    } else if (_currentDropZone == "after") {
+      // Enhanced "Place below" styling
+      backgroundColor = theme.colorScheme.primary.withOpacity(0.15);
+      borderColor = theme.colorScheme.primary;
+      content = Container(
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+        width: double.infinity,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Spacer(),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.arrow_downward,
+                  color: theme.colorScheme.primary,
+                  size: 20,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  "Place below",
+                  style: TextStyle(
+                    color: theme.colorScheme.primary,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      );
+    } else {
+      // Central "add as child" styling
+      backgroundColor = theme.colorScheme.secondary.withOpacity(0.15);
+      borderColor = theme.colorScheme.secondary;
+      content = Container(
+        padding: const EdgeInsets.all(12),
+        child: Center(
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                !_isExpanded && hasChildren
+                    ? Icons.expand_more
+                    : Icons.add_circle_outline,
+                color: theme.colorScheme.secondary,
+                size: 24,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                !_isExpanded && hasChildren
+                    ? 'Auto-expand and add as child'
+                    : hasChildren
+                        ? 'Add as child'
+                        : 'Drop here',
+                style: TextStyle(
+                  color: theme.colorScheme.secondary,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Positioned.fill(
+      child: Container(
+        decoration: BoxDecoration(
+          color: backgroundColor,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: borderColor,
+            width: 2,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: theme.shadowColor.withOpacity(0.2),
+              blurRadius: 4,
+              offset: const Offset(0, 2),
+            )
+          ],
+        ),
+        child: content,
+      ),
     );
   }
 
@@ -436,14 +866,14 @@ class _NodeItemState extends State<NodeItem> {
               : (dragging || _isHovering)
                   ? theme.colorScheme.primary
                   : Colors.transparent,
-          width: 1,
+          width: _isTargeted || dragging || _isHovering ? 2 : 1,
         ),
         boxShadow: dragging || _isHovering || _isTargeted
             ? [
                 BoxShadow(
                   color: theme.shadowColor.withOpacity(0.2),
                   blurRadius: 4,
-                  offset: Offset(0, 2),
+                  offset: const Offset(0, 2),
                 )
               ]
             : null,
@@ -655,35 +1085,10 @@ class _NodeItemState extends State<NodeItem> {
   }
 
   bool _wouldCreateCycle(NodeProvider provider, Node dragged, Node target) {
-    Node? current = target;
+    // A node cannot be moved inside itself (direct cycle)
+    if (dragged.id == target.id) return true;
 
-    // Navigate up the tree to check if target is a descendant of dragged
-    while (current != null) {
-      if (current.id == dragged.id) {
-        return true; // Would create a cycle
-      }
-      if (current.parentId == null) {
-        // Check if it's a root node
-        return false;
-      }
-
-      // Find the parent in rootNodes first
-      Node? parent;
-      for (final root in provider.rootNodes) {
-        if (root.id == current.parentId) {
-          parent = root;
-          break;
-        }
-      }
-
-      // If not found in root, look elsewhere
-      if (parent == null) {
-        parent = provider.findNodeById(current.parentId!);
-      }
-
-      current = parent;
-    }
-
-    return false;
+    // A node cannot be moved inside any of its descendants (would create cycle)
+    return provider.isDescendantOf(dragged, target);
   }
 }
