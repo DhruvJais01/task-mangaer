@@ -319,13 +319,20 @@ class _NodeItemState extends State<NodeItem> {
         DragTarget<Node>(
           builder: (context, candidateData, rejectedData) {
             final isTargeted = candidateData.isNotEmpty;
+            // final isTargeted = true;
+
+            // if (mounted) {
+            //   setState(() {
+            //     _isTargeted = true;
+            //   });
+            // }
 
             // Update state for targeted appearance - use didChangeDependencies instead of setState
             if (isTargeted != _isTargeted) {
               Future.microtask(() {
                 if (mounted) {
                   setState(() {
-                    _isTargeted = isTargeted;
+                    _isTargeted = true;
                   });
                 }
               });
