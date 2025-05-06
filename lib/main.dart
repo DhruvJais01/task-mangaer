@@ -1,12 +1,29 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'models/node.dart';
 import 'providers/node_provider.dart';
-import 'screens/home_screen.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'screens/sign_in_screen.dart';
+import 'screens/dash_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  if (kIsWeb) {
+    await Firebase.initializeApp(
+        options: const FirebaseOptions(
+            apiKey: "AIzaSyB3GovVeCVooPJdv9ify6CSieKec0dguzc",
+            authDomain: "task-manager-35eb3.firebaseapp.com",
+            projectId: "task-manager-35eb3",
+            storageBucket: "task-manager-35eb3.firebasestorage.app",
+            messagingSenderId: "643455994819",
+            appId: "1:643455994819:web:7abe922fc839ec32b88b76"));
+  } else {
+    await Firebase.initializeApp();
+  }
 
   try {
     // Initialize Hive
@@ -22,7 +39,7 @@ void main() async {
 }
 
 class HierarchicalListApp extends StatelessWidget {
-  const HierarchicalListApp({Key? key}) : super(key: key);
+  const HierarchicalListApp({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -57,7 +74,20 @@ class HierarchicalListApp extends StatelessWidget {
           ),
         ),
         themeMode: ThemeMode.system,
-        home: const HomeScreen(),
+        home: kDebugMode
+            ? const DashScreen()
+            : StreamBuilder<User?>(
+                stream: FirebaseAuth.instance.authStateChanges(),
+                builder: (context, snapshot) {
+                  if (snapshot.connectionState == ConnectionState.waiting) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  if (snapshot.hasData) {
+                    return const DashScreen();
+                  }
+                  return const SignInScreen();
+                },
+              ),
         debugShowCheckedModeBanner: false,
       ),
     );

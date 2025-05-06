@@ -68,7 +68,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
           return Column(
             children: [
-              Expanded(
+                            Expanded(
                 child: nodes.isEmpty
                     ? _buildEmptyState(context, isSearching)
                     : SingleChildScrollView(
@@ -109,8 +109,8 @@ class _HomeScreenState extends State<HomeScreen> {
               },
             );
           },
-          child: const Icon(Icons.add),
           tooltip: 'Add Root Node',
+          child: const Icon(Icons.add),
         ),
       ),
     );

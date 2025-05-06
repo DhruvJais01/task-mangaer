@@ -7,11 +7,11 @@ class NodeEditor extends StatefulWidget {
   final void Function(Node) onSubmit;
 
   const NodeEditor({
-    Key? key,
+    super.key,
     this.node,
     this.parent,
     required this.onSubmit,
-  }) : super(key: key);
+  });
 
   @override
   State<NodeEditor> createState() => _NodeEditorState();
@@ -101,7 +101,7 @@ class _NodeEditorState extends State<NodeEditor> {
                   decoration: BoxDecoration(
                     color: Theme.of(context)
                         .colorScheme
-                        .surfaceVariant
+                        .surfaceContainerHighest
                         .withOpacity(0.3),
                     borderRadius: BorderRadius.circular(4),
                   ),
