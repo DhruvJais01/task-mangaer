@@ -204,9 +204,9 @@ class _NodeItemState extends State<NodeItem> {
     final oldDropZone = _currentDropZone;
 
     // Using more balanced thresholds for better usability
-    // Top 35% = before, bottom 35% = after, middle 30% = inside
-    final topThresholdPercentage = 0.35;
-    final bottomThresholdPercentage = 0.65;
+    // Top 30% = before, bottom 30% = after, middle 40% = inside
+    final topThresholdPercentage = 0.30;
+    final bottomThresholdPercentage = 0.70;
 
     if (position.dy < nodeSize.height * topThresholdPercentage) {
       _currentDropZone = "before";
