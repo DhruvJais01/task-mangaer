@@ -47,7 +47,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       .searchNodes(value);
                 },
               )
-            : const Text('Inovizia Task Manager'),
+            : const Text('Innovizia Task Manager'),
         centerTitle: !_showSearchBar,
         actions: [
           IconButton(
