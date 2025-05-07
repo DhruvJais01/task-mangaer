@@ -32,10 +32,15 @@ class _HomeScreenState extends State<HomeScreen> {
                 decoration: InputDecoration(
                   hintText: 'Search tasks...',
                   border: InputBorder.none,
-                  hintStyle: TextStyle(color: Theme.of(context).hintColor),
+                  hintStyle: TextStyle(
+                    color: Theme.of(context).appBarTheme.foregroundColor ??
+                        Theme.of(context).colorScheme.onSurface,
+                  ),
                 ),
-                style:
-                    TextStyle(color: Theme.of(context).colorScheme.onPrimary),
+                style: TextStyle(
+                  color: Theme.of(context).appBarTheme.foregroundColor ??
+                      Theme.of(context).colorScheme.onSurface,
+                ),
                 autofocus: true,
                 onChanged: (value) {
                   Provider.of<NodeProvider>(context, listen: false)
@@ -68,7 +73,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
           return Column(
             children: [
-                            Expanded(
+              Expanded(
                 child: nodes.isEmpty
                     ? _buildEmptyState(context, isSearching)
                     : SingleChildScrollView(

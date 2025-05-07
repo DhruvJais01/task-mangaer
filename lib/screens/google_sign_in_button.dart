@@ -3,7 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
 class GoogleSignInButton extends StatelessWidget {
-  const GoogleSignInButton({Key? key}) : super(key: key);
+  const GoogleSignInButton({super.key});
 
   Future<UserCredential> signInWithGoogle() async {
     // Trigger the authentication flow
@@ -23,15 +23,15 @@ class GoogleSignInButton extends StatelessWidget {
   }
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context)  {
     return ElevatedButton.icon(
-      icon: Icon(Icons.login),
-      label: Text('Sign in with Google'),
+      icon: const Icon(Icons.login),
+      label: const Text('Sign in with Google'),
       onPressed: () async {
         try {
           await signInWithGoogle();
           ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Signed in with Google!')),
+            const SnackBar(content: Text('Signed in with Google!')),
           );
         } catch (e) {
           ScaffoldMessenger.of(context).showSnackBar(

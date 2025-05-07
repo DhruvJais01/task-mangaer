@@ -5,6 +5,55 @@ import 'dart:async'; // Add timer import
 import '../models/node.dart';
 import '../providers/node_provider.dart';
 import '../widgets/node_editor.dart';
+import 'package:flutter_slidable/flutter_slidable.dart';
+
+class AddNodeButton extends StatelessWidget {
+  final VoidCallback onPressed;
+  const AddNodeButton({required this.onPressed, super.key});
+  @override
+  Widget build(BuildContext context) => Tooltip(
+        message: 'Add Child',
+        child: IconButton(
+          icon: const Icon(Icons.add_circle_outline, size: 18),
+          onPressed: onPressed,
+          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+          padding: EdgeInsets.zero,
+          color: Colors.blue,
+        ),
+      );
+}
+
+class EditNodeButton extends StatelessWidget {
+  final VoidCallback onPressed;
+  const EditNodeButton({required this.onPressed, super.key});
+  @override
+  Widget build(BuildContext context) => Tooltip(
+        message: 'Edit',
+        child: IconButton(
+          icon: const Icon(Icons.edit, size: 18),
+          onPressed: onPressed,
+          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+          padding: EdgeInsets.zero,
+          color: Colors.orange,
+        ),
+      );
+}
+
+class DeleteNodeButton extends StatelessWidget {
+  final VoidCallback onPressed;
+  const DeleteNodeButton({required this.onPressed, super.key});
+  @override
+  Widget build(BuildContext context) => Tooltip(
+        message: 'Delete',
+        child: IconButton(
+          icon: const Icon(Icons.delete_outline, size: 18),
+          onPressed: onPressed,
+          constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+          padding: EdgeInsets.zero,
+          color: Theme.of(context).colorScheme.error,
+        ),
+      );
+}
 
 class NodeItem extends StatefulWidget {
   final Node node;
@@ -13,12 +62,12 @@ class NodeItem extends StatefulWidget {
   final Function(Node) onDelete;
 
   const NodeItem({
-    Key? key,
+    super.key,
     required this.node,
     this.parent,
     required this.onEdit,
     required this.onDelete,
-  }) : super(key: key);
+  });
 
   @override
   State<NodeItem> createState() => _NodeItemState();
@@ -228,7 +277,7 @@ class _NodeItemState extends State<NodeItem> {
     final depth = widget.node.depth;
     final hasChildren = widget.node.children.isNotEmpty;
     final indent = depth * 1.0;
-    final isSearchActive = nodeProvider.isSearchActive;
+    // final isSearchActive = nodeProvider.isSearchActive;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -295,15 +344,17 @@ class _NodeItemState extends State<NodeItem> {
                       ),
                     );
                   },
-                  onWillAccept: (dragged) {
-                    if (dragged == null) return false;
+                  onWillAcceptWithDetails: (DragTargetDetails<Node> details) {
+                    final dragged = details.data;
+                    // if (dragged == null) return false;
                     if (dragged.id == widget.node.id) return false;
                     // Prevent cyclic references
                     if (nodeProvider.isDescendantOf(dragged, widget.node))
                       return false;
                     return true;
                   },
-                  onAccept: (dragged) {
+                  onAcceptWithDetails: (DragTargetDetails<Node> details) {
+                    final dragged = details.data;
                     nodeProvider.insertNodeBefore(dragged, widget.node);
                     _resetDropZoneLocks();
                     _showReorderFeedback(dragged, "above");
@@ -425,14 +476,60 @@ class _NodeItemState extends State<NodeItem> {
                     : SystemMouseCursors.click,
                 child: Stack(
                   children: [
-                    // The main node card (with tap to show details)
                     GestureDetector(
                       onTap: _toggleDetails,
                       behavior: HitTestBehavior.opaque,
-                      child: _buildNodeCard(context, indent),
+                      child: Slidable(
+                        key: ValueKey(widget.node.id),
+                        endActionPane: ActionPane(
+                          motion: const ScrollMotion(),
+                          children: [
+                            CustomSlidableAction(
+                              backgroundColor: Colors.transparent,
+                              onPressed: (_) => showNodeEditor(
+                                context: context,
+                                node: null,
+                                parent: widget.node,
+                                onSubmit: (newNode) {
+                                  final provider = Provider.of<NodeProvider>(
+                                      context,
+                                      listen: false);
+                                  provider.addNode(widget.node, newNode);
+                                },
+                              ),
+                              child: AddNodeButton(
+                                onPressed: () => showNodeEditor(
+                                  context: context,
+                                  node: null,
+                                  parent: widget.node,
+                                  onSubmit: (newNode) {
+                                    final provider = Provider.of<NodeProvider>(
+                                        context,
+                                        listen: false);
+                                    provider.addNode(widget.node, newNode);
+                                  },
+                                ),
+                              ),
+                            ),
+                            CustomSlidableAction(
+                              backgroundColor: Colors.transparent,
+                              onPressed: (_) => widget.onEdit(widget.node),
+                              child: EditNodeButton(
+                                onPressed: () => widget.onEdit(widget.node),
+                              ),
+                            ),
+                            CustomSlidableAction(
+                              backgroundColor: Colors.transparent,
+                              onPressed: (_) => widget.onDelete(widget.node),
+                              child: DeleteNodeButton(
+                                onPressed: () => widget.onDelete(widget.node),
+                              ),
+                            ),
+                          ],
+                        ),
+                        child: _buildNodeCard(context, indent),
+                      ),
                     ),
-
-                    // Drop target indicator overlay for different zones
                     if (_isTargeted) _buildTargetOverlay(context, hasChildren),
                   ],
                 ),
@@ -442,7 +539,7 @@ class _NodeItemState extends State<NodeItem> {
           // Use onWillAcceptWithDetails to get position information
           onWillAcceptWithDetails: (DragTargetDetails<Node> details) {
             final dragged = details.data;
-            if (dragged == null) return false;
+            // if (dragged == null) return false;
 
             final nodeProvider =
                 Provider.of<NodeProvider>(context, listen: false);
@@ -669,15 +766,17 @@ class _NodeItemState extends State<NodeItem> {
                       ),
                     );
                   },
-                  onWillAccept: (dragged) {
-                    if (dragged == null) return false;
+                  onWillAcceptWithDetails: (DragTargetDetails<Node> details) {
+                    final dragged = details.data;
+                    // if (dragged == null) return false;
                     if (dragged.id == widget.node.id) return false;
                     // Prevent cyclic references
                     if (nodeProvider.isDescendantOf(dragged, widget.node))
                       return false;
                     return true;
                   },
-                  onAccept: (dragged) {
+                  onAcceptWithDetails: (DragTargetDetails<Node> details) {
+                    final dragged = details.data;
                     nodeProvider.insertNodeAfter(dragged, widget.node);
                     _resetDropZoneLocks();
                     _showReorderFeedback(dragged, "below");
@@ -825,155 +924,6 @@ class _NodeItemState extends State<NodeItem> {
     );
   }
 
-  // Title-only version for drag preview
-  Widget _buildNodeTitleOnly(BuildContext context, double indent,
-      {bool dragging = false}) {
-    final hasChildren = widget.node.children.isNotEmpty;
-    final theme = Theme.of(context);
-
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 2),
-      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-      decoration: BoxDecoration(
-        color: dragging || _isHovering || _isTargeted
-            ? _isTargeted
-                ? theme.colorScheme.secondary.withOpacity(0.1)
-                : theme.colorScheme.primary.withOpacity(0.1)
-            : theme.cardColor,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: _isTargeted
-              ? theme.colorScheme.secondary
-              : (dragging || _isHovering)
-                  ? theme.colorScheme.primary
-                  : Colors.transparent,
-          width: 1,
-        ),
-        boxShadow: dragging || _isHovering || _isTargeted
-            ? [
-                BoxShadow(
-                  color: theme.shadowColor.withOpacity(0.2),
-                  blurRadius: 4,
-                  offset: Offset(0, 2),
-                )
-              ]
-            : null,
-      ),
-      child: Row(
-        children: [
-          SizedBox(width: indent),
-
-          // Expand/Collapse Toggle - more compact
-          if (hasChildren)
-            SizedBox(
-              width: 30, // Reduced from 40
-              height: 30, // Reduced from 40
-              child: GestureDetector(
-                onTap: _toggleExpanded,
-                behavior: HitTestBehavior.opaque,
-                child: Icon(
-                  _isExpanded ? Icons.expand_more : Icons.chevron_right,
-                  size: 18, // Smaller icon
-                  color: theme.colorScheme.onSurface.withOpacity(0.7),
-                ),
-              ),
-            )
-          else
-            const SizedBox(width: 16), // Smaller indentation
-
-          // Node Title Only with overflow handling
-          Expanded(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Text(
-                widget.node.title,
-                style: theme.textTheme.bodyLarge?.copyWith(
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-          ),
-
-          // Action Buttons (tighter spacing, pushed right)
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Add Child button - more compact
-              SizedBox(
-                width: 32, // Reduced from 40
-                height: 32, // Reduced from 40
-                child: IconButton(
-                  icon: const Icon(Icons.add_circle_outline, size: 18),
-                  onPressed: () {
-                    showNodeEditor(
-                      context: context,
-                      node: null,
-                      parent: widget.node,
-                      onSubmit: (newNode) {
-                        final nodeProvider =
-                            Provider.of<NodeProvider>(context, listen: false);
-                        // Don't allow adding if already at max depth
-                        if (widget.node.depth >= 4) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                                content:
-                                    Text('Maximum depth of 5 levels reached')),
-                          );
-                          return;
-                        }
-
-                        // Add child node to this parent with properties from newNode
-                        nodeProvider.addNodeToProvider(
-                          parent: widget.node,
-                          title: newNode.title,
-                          notes: newNode.notes,
-                          tags: newNode.tags,
-                        );
-                      },
-                    );
-                  },
-                  tooltip: 'Add Child',
-                  constraints:
-                      const BoxConstraints(minWidth: 32, minHeight: 32),
-                  padding: EdgeInsets.zero,
-                ),
-              ),
-
-              // Edit button - more compact
-              SizedBox(
-                width: 32, // Reduced from 40
-                height: 32, // Reduced from 40
-                child: IconButton(
-                  icon: const Icon(Icons.edit, size: 18),
-                  onPressed: () => widget.onEdit(widget.node),
-                  tooltip: 'Edit',
-                  constraints:
-                      const BoxConstraints(minWidth: 32, minHeight: 32),
-                  padding: EdgeInsets.zero,
-                ),
-              ),
-
-              // Delete button - more compact
-              SizedBox(
-                width: 32, // Reduced from 40
-                height: 32, // Reduced from 40
-                child: IconButton(
-                  icon: const Icon(Icons.delete_outline, size: 18),
-                  onPressed: () => widget.onDelete(widget.node),
-                  tooltip: 'Delete',
-                  constraints:
-                      const BoxConstraints(minWidth: 32, minHeight: 32),
-                  padding: EdgeInsets.zero,
-                  color: Theme.of(context).colorScheme.error,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildNodeCard(BuildContext context, double indent,
       {bool dragging = false}) {
     final hasChildren = widget.node.children.isNotEmpty;
@@ -1022,22 +972,27 @@ class _NodeItemState extends State<NodeItem> {
                 SizedBox(width: indent),
 
                 // Expand/Collapse Toggle - more compact
-                if (hasChildren)
-                  SizedBox(
-                    width: 30, // Reduced from 40
-                    height: 30, // Reduced from 40
-                    child: GestureDetector(
-                      onTap: _toggleExpanded,
-                      behavior: HitTestBehavior.opaque,
-                      child: Icon(
-                        _isExpanded ? Icons.expand_more : Icons.chevron_right,
-                        size: 18, // Smaller icon
-                        color: theme.colorScheme.onSurface.withOpacity(0.7),
-                      ),
-                    ),
-                  )
-                else
-                  const SizedBox(width: 16), // Smaller indentation
+                SizedBox(
+                  width: 30,
+                  height: 30,
+                  child: hasChildren
+                      ? GestureDetector(
+                          onTap: _toggleExpanded,
+                          behavior: HitTestBehavior.opaque,
+                          child: Icon(
+                            _isExpanded
+                                ? Icons.expand_more
+                                : Icons.chevron_right,
+                            size: 18,
+                            color: theme.colorScheme.onSurface.withOpacity(0.7),
+                          ),
+                        )
+                      : const Icon(
+                          Icons.radio_button_unchecked,
+                          size: 18,
+                          color: Colors.grey,
+                        ),
+                ),
 
                 // Node Title with indicator and overflow handling
                 Expanded(
@@ -1067,84 +1022,6 @@ class _NodeItemState extends State<NodeItem> {
                         ),
                     ],
                   ),
-                ),
-
-                // Action Buttons (tighter spacing, pushed right)
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    // Add Child button - more compact
-                    SizedBox(
-                      width: 32, // Reduced from 40
-                      height: 32, // Reduced from 40
-                      child: IconButton(
-                        icon: const Icon(Icons.add_circle_outline, size: 18),
-                        onPressed: () {
-                          showNodeEditor(
-                            context: context,
-                            node: null,
-                            parent: widget.node,
-                            onSubmit: (newNode) {
-                              final nodeProvider = Provider.of<NodeProvider>(
-                                  context,
-                                  listen: false);
-                              // Don't allow adding if already at max depth
-                              if (widget.node.depth >= 4) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                      content: Text(
-                                          'Maximum depth of 5 levels reached')),
-                                );
-                                return;
-                              }
-
-                              // Add child node to this parent with properties from newNode
-                              nodeProvider.addNodeToProvider(
-                                parent: widget.node,
-                                title: newNode.title,
-                                notes: newNode.notes,
-                                tags: newNode.tags,
-                              );
-                            },
-                          );
-                        },
-                        tooltip: 'Add Child',
-                        constraints:
-                            const BoxConstraints(minWidth: 32, minHeight: 32),
-                        padding: EdgeInsets.zero,
-                      ),
-                    ),
-
-                    // Edit button - more compact
-                    SizedBox(
-                      width: 32, // Reduced from 40
-                      height: 32, // Reduced from 40
-                      child: IconButton(
-                        icon: const Icon(Icons.edit, size: 18),
-                        onPressed: () => widget.onEdit(widget.node),
-                        tooltip: 'Edit',
-                        constraints:
-                            const BoxConstraints(minWidth: 32, minHeight: 32),
-                        padding: EdgeInsets.zero,
-                      ),
-                    ),
-
-                    // Delete button - more compact
-                    SizedBox(
-                      width: 32, // Reduced from 40
-                      height: 32, // Reduced from 40
-                      child: IconButton(
-                        icon: const Icon(Icons.delete_outline, size: 18),
-                        onPressed: () => widget.onDelete(widget.node),
-                        tooltip: 'Delete',
-                        constraints:
-                            const BoxConstraints(minWidth: 32, minHeight: 32),
-                        padding: EdgeInsets.zero,
-                        color: Theme.of(context).colorScheme.error,
-                      ),
-                    ),
-                  ],
                 ),
               ],
             ),
@@ -1215,13 +1092,5 @@ class _NodeItemState extends State<NodeItem> {
         ],
       ),
     );
-  }
-
-  bool _wouldCreateCycle(NodeProvider provider, Node dragged, Node target) {
-    // A node cannot be moved inside itself (direct cycle)
-    if (dragged.id == target.id) return true;
-
-    // A node cannot be moved inside any of its descendants (would create cycle)
-    return provider.isDescendantOf(dragged, target);
   }
 }

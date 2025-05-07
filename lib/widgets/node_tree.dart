@@ -9,12 +9,12 @@ class NodeTree extends StatelessWidget {
   final Function(Node) onDelete;
 
   const NodeTree({
-    Key? key,
+    super.key,
     required this.nodes,
     this.parent,
     required this.onEdit,
     required this.onDelete,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
